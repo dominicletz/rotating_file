@@ -5,10 +5,11 @@ defmodule RotatingFile.MixProject do
   def project do
     [
       app: :rotating_file,
-      version: "0.1.0",
+      version: "0.1.1",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      aliases: aliases(),
 
       # Hex
       description: "GenServer that writes to rotating compressed files for archival and logging.",
@@ -33,6 +34,10 @@ defmodule RotatingFile.MixProject do
     [
       extra_applications: [:logger]
     ]
+  end
+
+  def aliases do
+    [lint: ["credo --strict", "format --check-formatted"]]
   end
 
   # Run "mix help deps" to learn about dependencies.

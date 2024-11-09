@@ -11,7 +11,7 @@ defmodule RotatingFile do
     {"gzip", []}
   ]
 
-  defstruct [:cmd, :max_size, :max_files, :log_file]
+  defstruct [:cmd, :max_size, :max_files, :file]
   use GenServer
 
   @doc """
@@ -22,29 +22,37 @@ defmodule RotatingFile do
   - `:name` - The name of the GenServer process. Defaults to `RotatingFile`.
   - `:max_size` - The maximum size of the log file in bytes. Defaults to `100 * 1024 * 1024`.
   - `:max_files` - The maximum number of log files to keep. Defaults to `10`.
-  - `:log_file` - The path to the log file. Defaults to `"output.log"`.
+  - `:file` - The path to the log file. Defaults to `"output.log"`.
 
   ## Example
 
   ```elixir
-  RotatingFile.start_link(name: :rotating_file, max_size: 100 * 1024 * 1024, max_files: 10, log_file: "stdout.log")
+  RotatingFile.start_link(name: :rotating_file, max_size: 100 * 1024 * 1024, max_files: 10, file: "stdout.log")
   ```
   """
   def start_link(opts) do
     {name, opts} = Keyword.pop(opts, :name, __MODULE__)
     {max_size, opts} = Keyword.pop(opts, :max_size, 100 * 1024 * 1024)
     {max_files, opts} = Keyword.pop(opts, :max_files, 10)
-    {log_file, opts} = Keyword.pop(opts, :log_file, "output.log")
+    {file, opts} = Keyword.pop(opts, :file, "output.log")
 
     if length(opts) > 0 do
-      raise "Unknown extra options: #{inspect(opts)}"
+      raise """
+      Unknown extra options: #{inspect(opts)}
+
+      Valid options are:
+      - name: The name of the GenServer process. Defaults to #{__MODULE__}
+      - max_size: The maximum size of the log file in bytes. Defaults to #{max_size}
+      - max_files: The maximum number of log files to keep. Defaults to #{max_files}
+      - file: The path to the log file. Defaults to #{file}
+      """
     end
 
     cmd =
       Enum.find(@compress_cmds, fn {cmd, _} -> System.find_executable(cmd) end) ||
         raise "No compression tool found"
 
-    state = %RotatingFile{cmd: cmd, max_size: max_size, max_files: max_files, log_file: log_file}
+    state = %RotatingFile{cmd: cmd, max_size: max_size, max_files: max_files, file: file}
     GenServer.start_link(__MODULE__, state, name: name, hibernate_after: 10_000)
   end
 
@@ -96,20 +104,20 @@ defmodule RotatingFile do
   end
 
   defp write_to_log(state, bytes) do
-    File.write!(state.log_file, bytes, [:append])
+    File.write!(state.file, bytes, [:append])
     rotate_if_needed(state)
     state
   end
 
   defp rotate_if_needed(state) do
-    with {:ok, %{size: size}} when size > state.max_size <- File.stat(state.log_file) do
+    with {:ok, %{size: size}} when size > state.max_size <- File.stat(state.file) do
       rotate_log(state)
     end
   end
 
   defp rotate_log(state) do
-    compressed_name = "#{state.log_file}.#{:os.system_time(:seconds)}"
-    File.rename(state.log_file, compressed_name)
+    compressed_name = "#{state.file}.#{:os.system_time(:seconds)}"
+    File.rename(state.file, compressed_name)
 
     spawn(fn ->
       {cmd, args} = state.cmd
@@ -119,16 +127,16 @@ defmodule RotatingFile do
   end
 
   defp do_delete_old_logs(state) do
-    File.ls!(Path.dirname(state.log_file))
+    File.ls!(Path.dirname(state.file))
     |> Enum.sort(:desc)
-    |> Enum.filter(&String.starts_with?(&1, state.log_file <> "."))
+    |> Enum.filter(&String.starts_with?(&1, state.file <> "."))
     |> Enum.drop(state.max_files)
     |> Enum.each(&File.rm/1)
   end
 
   defp do_delete_all(state) do
-    File.ls!(Path.dirname(state.log_file))
-    |> Enum.filter(&String.starts_with?(&1, state.log_file))
+    File.ls!(Path.dirname(state.file))
+    |> Enum.filter(&String.starts_with?(&1, state.file))
     |> Enum.each(&File.rm/1)
 
     state
