@@ -127,17 +127,21 @@ defmodule RotatingFile do
   end
 
   defp do_delete_old_logs(state) do
+    basename = Path.basename(state.file)
+
     File.ls!(Path.dirname(state.file))
     |> Enum.sort(:desc)
-    |> Enum.filter(&String.starts_with?(&1, state.file <> "."))
+    |> Enum.filter(&String.starts_with?(&1, basename <> "."))
     |> Enum.drop(state.max_files)
-    |> Enum.each(&File.rm/1)
+    |> Enum.each(fn file -> File.rm(Path.join(Path.dirname(state.file), file)) end)
   end
 
   defp do_delete_all(state) do
+    basename = Path.basename(state.file)
+
     File.ls!(Path.dirname(state.file))
-    |> Enum.filter(&String.starts_with?(&1, state.file))
-    |> Enum.each(&File.rm/1)
+    |> Enum.filter(&String.starts_with?(&1, basename))
+    |> Enum.each(fn file -> File.rm(Path.join(Path.dirname(state.file), file)) end)
 
     state
   end
